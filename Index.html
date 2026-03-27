@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>울산항 안전 제보 시스템</title>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    <style>
+        body { font-family: 'Malgun Gothic', sans-serif; margin: 0; padding: 15px; background: #f0f2f5; }
+        .header { background: #003366; color: white; padding: 15px; border-radius: 10px; margin-bottom: 15px; text-align: center; }
+        #map { width: 100%; height: 350px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); background: #eee; }
+        .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 15px; }
+        label { display: block; font-weight: bold; margin-bottom: 8px; color: #333; }
+        #coords { background: #e9ecef; padding: 10px; border-radius: 5px; font-size: 0.9em; color: #555; margin-bottom: 15px; border: 1px solid #ddd; }
+        textarea { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 14px; resize: none; margin-bottom: 15px; }
+        .photo-input { margin-bottom: 15px; }
+        #preview { display: flex; gap: 10px; margin-bottom: 15px; overflow-x: auto; }
+        .preview-img { width: 80px; height: 80px; object-fit: cover; border-radius: 5px; border: 1px solid #ddd; }
+        button { width: 100%; padding: 16px; background: #d9534f; color: white; border: none; border-radius: 8px; font-size: 18px; font-weight: bold; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h2 style="margin:0;">⚓ 울산항 안전 Hot-Line</h2>
+        <p style="margin:5px 0 0; font-size:0.8em;">위치나 내용, 사진 중 하나 이상 입력해주세요.</p>
+    </div>
+    <div id="map"></div>
+    <div class="card">
+        <label>📍 사고 발생 위치 (지도 클릭)</label>
+        <div id="coords">위도: 35.50500 / 경도: 129.37500</div>
+        <label>📝 위험 상세 내용</label>
+        <textarea id="desc" rows="4" placeholder="내용을 입력하세요."></textarea>
+        <label>📸 현장 사진 (최대 3장)</label>
+        <input type="file" id="photos" accept="image/*" multiple class="photo-input" onchange="previewFiles()">
+        <div id="preview"></div>
+        <button onclick="submitReport()">⚠️ 안전 제보 제출하기</button>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyASI2ED_G48LjDzH5-P_ahzDEPhDEpCLP4",
+            authDomain: "ulsan-safety-ar.firebaseapp.com",
+            databaseURL: "https://ulsan-safety-ar-default-rtdb.firebaseio.com",
+            projectId: "ulsan-safety-ar",
+            storageBucket: "ulsan-safety-ar.firebasestorage.app",
+            messagingSenderId: "1025974157267",
+            appId: "1:1025974157267:web:677b9d7550f495e5e1b926"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+        let selectedPos = { lat: 35.505, lng: 129.375 };
+        let encodedPhotos = [];
+
+        function initMap() {
+            const map = new google.maps.Map(document.getElementById("map"), { zoom: 15, center: selectedPos, mapTypeId: 'roadmap' });
+            let marker = new google.maps.Marker({ position: selectedPos, map: map, draggable: true });
+            map.addListener("click", (e) => {
+                marker.setPosition(e.latLng);
+                selectedPos = { lat: e.latLng.lat(), lng: e.latLng.lng() };
+                document.getElementById("coords").innerText = `위도: ${selectedPos.lat.toFixed(5)} / 경도: ${selectedPos.lng.toFixed(5)}`;
+            });
+        }
+
+        async function previewFiles() {
+            const files = document.getElementById('photos').files;
+            const preview = document.getElementById('preview');
+            preview.innerHTML = '';
+            encodedPhotos = [];
+            if(files.length > 3) { alert("사진은 3장까지만 가능합니다."); return; }
+            for (let file of files) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const img = document.createElement('img');
+                    img.src = e.target.result;
+                    img.className = 'preview-img';
+                    preview.appendChild(img);
+                    encodedPhotos.push(e.target.result);
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function submitReport() {
+            const desc = document.getElementById("desc").value;
+            // 위치는 기본값이 있으므로 내용이나 사진 유무만 체크
+            if (!desc && encodedPhotos.length === 0) {
+                alert("상세 내용이나 사진 중 하나는 반드시 포함되어야 합니다.");
+                return;
+            }
+            database.ref('safety_reports').push({
+                lat: selectedPos.lat, lng: selectedPos.lng,
+                description: desc, photos: encodedPhotos,
+                timestamp: new Date().toLocaleString()
+            }).then(() => { alert("제보 완료!"); location.reload(); });
+        }
+    </script>
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDxW1MSwOsEMsWuyEUicFzms6ybX0Ff8To&callback=initMap" async defer></script>
+</body>
+</html>
