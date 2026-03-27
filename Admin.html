@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>울산항 안전 통합 관제 (Admin v8)</title>
+    <title>울산항 안전 통합 관제 (Admin v9)</title>
     
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
@@ -49,15 +49,16 @@
             projectId: "ulsan-safety-ar",
             storageBucket: "ulsan-safety-ar.firebasestorage.app",
             messagingSenderId: "1025974157267",
-            appId: "1:1025974157267:web:677b9d7550f495e5e1b926" // 끝자리까지 일치시킴
+            appId: "1:1025974157267:web:677b9d7550f495e5e1b926"
         };
         firebase.initializeApp(firebaseConfig);
         const database = firebase.database();
 
         let map;
         const markers = {};
+        let infoWindow; // 정보창 단일 객체 사용
 
-        // 2. 지도 및 데이터 수신 로직
+        // 2. 지도 초기화
         function initMap() {
             map = new google.maps.Map(document.getElementById("map"), {
                 center: { lat: 35.5012, lng: 129.3789 },
@@ -65,7 +66,9 @@
                 disableDefaultUI: false
             });
 
-            // 중요: 방 이름을 'safety_reports'로 수정하여 Index와 동기화
+            infoWindow = new google.maps.InfoWindow();
+
+            // Firebase 실시간 리스너
             database.ref('safety_reports').on('value', (snapshot) => {
                 const data = snapshot.val();
                 if(data) updateSystem(data);
@@ -85,14 +88,27 @@
                 
                 lastPos = { lat: lat, lng: lng };
 
-                // [지도 마커]
+                // [지도 마커 및 클릭 이벤트]
                 if (!markers[id]) {
-                    markers[id] = new google.maps.Marker({
+                    const marker = new google.maps.Marker({
                         position: lastPos,
                         map: map,
-                        title: report.description || '위험 제보',
                         animation: google.maps.Animation.DROP
                     });
+                    
+                    // 마커 클릭 시 정보창 표시 로직 추가
+                    marker.addListener("click", () => {
+                        const content = `
+                            <div style="padding:10px; color:#333;">
+                                <strong style="font-size:14px;">📝 제보 내용</strong><br>
+                                <p style="margin:5px 0;">${report.description || '내용 없음'}</p>
+                                <small style="color:#888;">⏰ ${report.timestamp || ''}</small>
+                            </div>`;
+                        infoWindow.setContent(content);
+                        infoWindow.open(map, marker);
+                    });
+                    
+                    markers[id] = marker;
                 }
 
                 // [AR 마커]
@@ -100,21 +116,11 @@
                 arMarker.setAttribute('gps-entity-place', `latitude: ${lat}; longitude: ${lng};`);
                 arMarker.setAttribute('geometry', 'primitive: sphere; radius: 3');
                 arMarker.setAttribute('material', 'color: red; opacity: 0.8');
-                
-                const text = document.createElement('a-text');
-                text.setAttribute('value', report.description ? report.description.substring(0, 10) : '위험');
-                text.setAttribute('align', 'center');
-                text.setAttribute('scale', '40 40 40');
-                text.setAttribute('position', '0 8 0');
-                
-                arMarker.appendChild(text);
                 arScene.appendChild(arMarker);
             }
 
-            // 타지방(부산) 테스트 시 지도를 마지막 제보 위치로 이동
             if (lastPos) {
                 map.setCenter(lastPos);
-                map.setZoom(17);
             }
         }
 
@@ -131,7 +137,6 @@
             window.dispatchEvent(new Event('resize'));
         }
 
-        // 구글 맵 로드 (Index와 동일한 API 키 사용)
         const gKey = "AIzaSyDxW1MSwOsEMsWuyEUicFzms6ybX0Ff8To";
         const script = document.createElement('script');
         script.src = `https://maps.googleapis.com/maps/api/js?key=${gKey}&callback=initMap`;
