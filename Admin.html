@@ -2,153 +2,69 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>울산항 안전 관리 시스템 (Admin v3)</title>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
-    <script src="https://t1.kakaocdn.net/kakao_js_sdk/2.7.0/kakao.min.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>울산항 안전 관리자 - AR 관제</title>
+    <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
     <style>
-        body { font-family: 'Malgun Gothic', sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; }
-        .header { background: #002244; color: white; padding: 15px; text-align: center; position: relative; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
-        #map { flex: 1; width: 100%; }
-        .info-window { max-width: 260px; padding: 10px; }
-        .info-window img { width: 100%; border-radius: 5px; margin-top: 8px; border: 1px solid #ddd; }
-        .edit-box { display: none; margin-top: 10px; border-top: 1px solid #eee; padding-top: 10px; }
-        textarea { width: 100%; margin-top: 5px; border: 1px solid #ccc; border-radius: 4px; padding: 8px; box-sizing: border-box; font-size: 14px; }
-        .btn { width: 100%; padding: 12px; color: white; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; margin-top: 8px; font-size: 14px; }
-        .btn-kakao { background: #FEE500; color: #3c1e1e; }
-        .btn-edit { background: #007bff; }
-        .btn-save { background: #fd7e14; display: none; }
-        .btn-delete { background: #dc3545; }
-        .status-msg { font-size: 13px; color: #d9534f; font-weight: bold; margin-bottom: 8px; padding: 5px; background: #fff5f5; border-radius: 4px; text-align: center; }
-        #new-alert { position: absolute; top: 12px; right: 15px; background: #ff4d4d; color: white; padding: 6px 12px; border-radius: 20px; font-size: 12px; display: none; animation: blink 1s infinite; font-weight: bold; box-shadow: 0 0 10px rgba(255,0,0,0.5); }
-        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
+        body { margin: 0; padding: 0; }
+        #map { height: 100vh; width: 100%; position: absolute; top: 0; left: 0; z-index: 1; }
+        .ar-scene { position: absolute; top: 0; left: 0; width: 100%; height: 100vh; display: none; z-index: 2; }
+        .ui-panel { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); z-index: 999; display: flex; gap: 10px; }
+        button { padding: 15px 25px; border-radius: 30px; border: none; font-weight: bold; cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+        .btn-toggle { background: #007bff; color: white; }
+        .btn-ar { background: #ff4757; color: white; }
     </style>
 </head>
 <body>
-    <div class="header">
-        <h2 style="margin:0;">⚓ 울산항 안전 관리 (Admin)</h2>
-        <div id="new-alert">🔔 신규 제보!</div>
+
+    <div id="map">
+        <p style="text-align: center; margin-top: 50px;">지도를 로드 중입니다...</p>
     </div>
-    <div id="map"></div>
+
+    <div id="ar-view" class="ar-scene">
+        <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false;" vr-mode-ui="enabled: false">
+            <a-entity id="hazard-marker" 
+                      gps-entity-place="latitude: 35.5012; longitude: 129.3789;"
+                      geometry="primitive: sphere; radius: 1.5" 
+                      material="color: red; opacity: 0.9"
+                      look-at="[gps-camera]">
+                <a-text value="제보: 낙하물 주의" align="center" scale="15 15 15" position="0 3 0" color="yellow"></a-text>
+            </a-entity>
+
+            <a-camera gps-camera rotation-reader></a-camera>
+        </a-scene>
+    </div>
+
+    <div class="ui-panel">
+        <button class="btn-toggle" onclick="showMap()">🗺️ 지도 보기</button>
+        <button class="btn-ar" onclick="showAR()">🚀 AR 모드 (360도 스캔)</button>
+    </div>
 
     <script>
-        // 1. 설정 정보
-        const firebaseConfig = {
-            apiKey: "AIzaSyASI2ED_G48LjDzH5-P_ahzDEPhDEpCLP4",
-            authDomain: "ulsan-safety-ar.firebaseapp.com",
-            databaseURL: "https://ulsan-safety-ar-default-rtdb.firebaseio.com",
-            projectId: "ulsan-safety-ar",
-            storageBucket: "ulsan-safety-ar.firebasestorage.app",
-            messagingSenderId: "1025974157267",
-            appId: "1:1025974157267:web:677b9d7550f495e5e1b926"
-        };
-        firebase.initializeApp(firebaseConfig);
-        const database = firebase.database();
-
-        if (!Kakao.isInitialized()) Kakao.init('b3a62d47660205566374828131d234a7'); // 임시 카카오키
-
-        let map, infoWindow, currentEditKey = null;
-        let markers = {};
-        let isFirstLoad = true;
-
-        function initMap() {
-            // 울산항 중심 위치로 설정
-            map = new google.maps.Map(document.getElementById("map"), {
-                zoom: 13, center: { lat: 35.49, lng: 129.39 }, mapTypeId: 'roadmap'
-            });
-            infoWindow = new google.maps.InfoWindow();
-
-            database.ref('safety_reports').on('value', (snapshot) => {
-                const data = snapshot.val();
-                if (!isFirstLoad) {
-                    document.getElementById('new-alert').style.display = 'block';
-                    setTimeout(() => { document.getElementById('new-alert').style.display = 'none'; }, 6000);
-                }
-                
-                for (let key in markers) { markers[key].setMap(null); }
-                markers = {};
-                if (!data) return;
-
-                Object.keys(data).forEach(key => {
-                    const report = data[key];
-                    const isDraft = report.lat === 35.505; // 위치 미지정 체크
-                    
-                    const marker = new google.maps.Marker({
-                        position: { lat: report.lat, lng: report.lng },
-                        map: map,
-                        animation: isDraft ? google.maps.Animation.BOUNCE : null,
-                        title: report.description
-                    });
-                    markers[key] = marker;
-
-                    marker.addListener("click", () => {
-                        let photoHtml = '';
-                        if (report.photos) {
-                            report.photos.forEach(img => photoHtml += `<img src="${img}" onclick="window.open(this.src)">`);
-                        }
-
-                        const content = `
-                            <div class="info-window">
-                                ${isDraft ? "<div class='status-msg'>⚠️ 위치 미지정 제보</div>" : ""}
-                                <p><strong>제보 내용:</strong> ${report.description || '내용 없음'}</p>
-                                <p style="font-size:11px; color:#888;">접수: ${report.timestamp}</p>
-                                
-                                <button class="btn btn-kakao" onclick="sendKakao('${report.description}', '${report.timestamp}')">💬 카톡 공유 (나에게)</button>
-                                
-                                <div id="edit-area-${key}" class="edit-box">
-                                    <strong>📍 위치 수정:</strong><br><small>지도를 터치하여 핀을 옮기세요.</small>
-                                    <textarea id="edit-desc-${key}">${report.description || ''}</textarea>
-                                </div>
-                                ${photoHtml}
-                                <button class="btn btn-edit" id="btn-edit-${key}" onclick="startEdit('${key}')">✏️ 위치/내용 수정</button>
-                                <button class="btn btn-save" id="btn-save-${key}" onclick="saveEdit('${key}')">💾 수정 완료 저장</button>
-                                <button class="btn btn-delete" onclick="deleteReport('${key}')">✅ 조치 완료 (삭제)</button>
-                            </div>
-                        `;
-                        infoWindow.setContent(content);
-                        infoWindow.open(map, marker);
-                    });
-                });
-                isFirstLoad = false;
-            });
-
-            map.addListener("click", (e) => {
-                if (currentEditKey && markers[currentEditKey]) {
-                    markers[currentEditKey].setPosition(e.latLng);
-                }
-            });
+        // 모드 전환 함수
+        function showMap() {
+            document.getElementById('map').style.display = 'block';
+            document.getElementById('ar-view').style.display = 'none';
         }
 
-        function sendKakao(desc, time) {
-            alert("카카오톡 창이 열리면 '나'를 선택해 보내세요.");
-            Kakao.Share.sendDefault({
-                objectType: 'text',
-                text: `[울산항 안전제보 확인요망]\n내용: ${desc}\n시간: ${time}`,
-                link: { mobileWebUrl: window.location.href, webUrl: window.location.href },
-            });
+        function showAR() {
+            document.getElementById('map').style.display = 'none';
+            document.getElementById('ar-view').style.display = 'block';
+            // AR 모드 진입 시 카메라 권한 요청 등을 위해 리프레시가 필요할 수 있음
         }
 
-        function startEdit(key) {
-            currentEditKey = key;
-            document.getElementById(`edit-area-${key}`).style.display = 'block';
-            document.getElementById(`btn-edit-${key}`).style.display = 'none';
-            document.getElementById(`btn-save-${key}`).style.display = 'block';
+        // 여기에 기존 도선사님의 구글맵 로드 스크립트와 Firebase 연동 코드를 붙여넣으시면 됩니다.
+        // Firebase에서 데이터를 가져와서 아래와 같이 a-scene에 추가하는 로직이 핵심입니다.
+        /* function addARMarker(lat, lng, title) {
+            const scene = document.querySelector('a-scene');
+            const entity = document.createElement('a-entity');
+            entity.setAttribute('gps-entity-place', `latitude: ${lat}; longitude: ${lng};`);
+            entity.setAttribute('geometry', 'primitive: sphere; radius: 1.5');
+            entity.setAttribute('material', 'color: red');
+            scene.appendChild(entity);
         }
-
-        function saveEdit(key) {
-            const pos = markers[key].getPosition();
-            const desc = document.getElementById(`edit-desc-${key}`).value;
-            database.ref('safety_reports/' + key).update({ lat: pos.lat(), lng: pos.lng(), description: desc })
-                .then(() => { alert("저장되었습니다."); infoWindow.close(); currentEditKey = null; });
-        }
-
-        function deleteReport(key) {
-            if (confirm("정말 삭제하시겠습니까? 데이터가 영구 제거됩니다.")) {
-                database.ref('safety_reports/' + key).remove().then(() => alert("삭제 완료"));
-            }
-        }
+        */
     </script>
-    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDxW1MSwOsEMsWuyEUicFzms6ybX0Ff8To&callback=initMap" async defer></script>
 </body>
 </html>
