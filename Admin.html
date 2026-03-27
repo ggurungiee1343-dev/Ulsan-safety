@@ -1,79 +1,31 @@
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>울산항 안전 관리 v4 (Admin)</title>
-    
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
-    <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
-    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
-
-    <style>
-        body { font-family: 'Malgun Gothic', sans-serif; margin: 0; background: #000; height: 100vh; overflow: hidden; }
-        .header { background: #002244; color: white; padding: 15px; text-align: center; z-index: 1001; position: relative; box-shadow: 0 2px 10px rgba(0,0,0,0.5); }
-        
-        /* 레이어 구조: 지도(10) / AR(5) */
-        #map-container { position: absolute; top: 55px; left: 0; width: 100%; height: calc(100% - 55px); z-index: 10; background: white; visibility: visible; }
-        #map { width: 100%; height: 100%; }
-        
-        #ar-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 5; visibility: hidden; }
-
-        /* UI 버튼 설정 */
-        .btn-group { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); z-index: 1002; display: flex; gap: 12px; width: 90%; max-width: 450px; }
-        button { flex: 1; padding: 18px; border-radius: 15px; border: none; font-weight: bold; font-size: 16px; color: white; cursor: pointer; box-shadow: 0 4px 15px rgba(0,0,0,0.4); transition: 0.2s; }
-        .btn-map { background: #007bff; }
-        .btn-ar { background: #ff4757; }
-        button:active { transform: scale(0.95); }
-        
-        #status-label { position: fixed; top: 75px; left: 50%; transform: translateX(-50%); z-index: 1001; background: rgba(0,0,0,0.7); color: white; padding: 6px 18px; border-radius: 20px; font-size: 13px; }
-    </style>
-</head>
-<body>
-    <div class="header">⚓ 울산항 안전 통합 관제 (Admin)</div>
-    <div id="status-label">현재 모드: 🗺️ 실시간 지도</div>
-
-    <div id="map-container">
-        <div id="map">지도를 불러오는 중입니다...</div>
-    </div>
-
-    <div id="ar-container">
-        <a-scene embedded arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false;" vr-mode-ui="enabled: false">
-            <a-entity id="ar-markers"></a-entity> <a-camera gps-camera rotation-reader></a-camera>
-        </a-scene>
-    </div>
-
-    <div class="btn-group">
-        <button class="btn-map" onclick="switchToMap()">🗺️ 지도 보기</button>
-        <button class="btn-ar" onclick="switchToAR()">🚀 AR 현장 스캔</button>
-    </div>
-
-    <script>
-        // 1. Firebase 설정 (도선사님 프로젝트 정보)
-        const firebaseConfig = {
-            apiKey: "AIzaSyASI2ED_G48LjDzH5-P_ahzDEPhDEpCLP4",
-            authDomain: "ulsan-safety-ar.firebaseapp.com",
-            databaseURL: "https://ulsan-safety-ar-default-rtdb.firebaseio.com",
-            projectId: "ulsan-safety-ar",
-            storageBucket: "ulsan-safety-ar.firebasestorage.app",
-            messagingSenderId: "1025974157267",
-            appId: "1:1025974157267:web:677b9d7550"
+<script>
+    // 구글 맵 API 로드 함수 (위치 이동 및 단순화)
+    function loadGoogleMaps() {
+        const script = document.createElement('script');
+        // 도선사님 API 키 직접 삽입
+        script.src = "https://maps.googleapis.com/maps/api/js?key=AIzaSyASI2ED_G48LjDzH5-P_ahzDEPhDEpCLP4&callback=initMap";
+        script.defer = true;
+        script.async = true;
+        script.onerror = () => {
+            alert("구글 지도 로드 실패! API 키나 결제 설정을 확인하세요.");
         };
-        if (!firebase.apps.length) { firebase.initializeApp(firebaseConfig); }
-        const database = firebase.database();
+        document.head.appendChild(script);
+    }
 
-        let map;
-        const markers = {};
+    // 페이지 로드 시 실행
+    window.onload = loadGoogleMaps;
 
-        // 2. 지도 및 데이터 연동 함수
-        function initMap() {
-            try {
-                map = new google.maps.Map(document.getElementById("map"), {
-                    center: { lat: 35.5012, lng: 129.3789 },
-                    zoom: 14,
-                    disableDefaultUI: true,
-                    zoomControl: true
-                });
-
-                // Firebase
+    function initMap() {
+        console.log("지도 초기화 시작");
+        map = new google.maps.Map(document.getElementById("map"), {
+            center: { lat: 35.5012, lng: 129.3789 },
+            zoom: 14,
+            disableDefaultUI: false // UI 일단 모두 켜서 확인
+        });
+        // Firebase 연결 (이하 동일)
+        database.ref('reports').on('value', (snapshot) => {
+            const data = snapshot.val();
+            if(data) updateUI(data);
+        });
+    }
+</script>
