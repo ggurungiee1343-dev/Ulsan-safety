@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>울산항 안전 관리 v4 (Admin)</title>
+    <title>울산항 안전 관리 (Admin v5)</title>
     
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
@@ -12,22 +12,21 @@
 
     <style>
         body { font-family: 'Malgun Gothic', sans-serif; margin: 0; background: #000; height: 100vh; overflow: hidden; }
-        .header { background: #002244; color: white; padding: 15px; text-align: center; z-index: 1001; position: relative; box-shadow: 0 2px 10px rgba(0,0,0,0.5); }
+        .header { background: #002244; color: white; padding: 15px; text-align: center; z-index: 1001; position: relative; font-weight: bold; }
         
-        /* 레이어 구조: 지도(10) / AR(5) */
+        /* 레이어: 지도(높음) / AR(낮음) */
         #map-container { position: absolute; top: 55px; left: 0; width: 100%; height: calc(100% - 55px); z-index: 10; background: white; visibility: visible; }
         #map { width: 100%; height: 100%; }
         
         #ar-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 5; visibility: hidden; }
 
-        /* UI 버튼 설정 */
-        .btn-group { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); z-index: 1002; display: flex; gap: 12px; width: 90%; max-width: 450px; }
-        button { flex: 1; padding: 18px; border-radius: 15px; border: none; font-weight: bold; font-size: 16px; color: white; cursor: pointer; box-shadow: 0 4px 15px rgba(0,0,0,0.4); transition: 0.2s; }
+        /* 하단 버튼 */
+        .btn-group { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); z-index: 1002; display: flex; gap: 10px; width: 90%; max-width: 450px; }
+        button { flex: 1; padding: 18px; border-radius: 15px; border: none; font-weight: bold; font-size: 16px; color: white; cursor: pointer; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
         .btn-map { background: #007bff; }
         .btn-ar { background: #ff4757; }
-        button:active { transform: scale(0.95); }
         
-        #status-label { position: fixed; top: 75px; left: 50%; transform: translateX(-50%); z-index: 1001; background: rgba(0,0,0,0.7); color: white; padding: 6px 18px; border-radius: 20px; font-size: 13px; }
+        #status-label { position: fixed; top: 75px; left: 50%; transform: translateX(-50%); z-index: 1001; background: rgba(0,0,0,0.8); color: white; padding: 6px 18px; border-radius: 20px; font-size: 12px; }
     </style>
 </head>
 <body>
@@ -40,7 +39,8 @@
 
     <div id="ar-container">
         <a-scene embedded arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false;" vr-mode-ui="enabled: false">
-            <a-entity id="ar-markers"></a-entity> <a-camera gps-camera rotation-reader></a-camera>
+            <a-entity id="ar-markers"></a-entity>
+            <a-camera gps-camera rotation-reader></a-camera>
         </a-scene>
     </div>
 
@@ -50,7 +50,7 @@
     </div>
 
     <script>
-        // 1. Firebase 설정 (도선사님 프로젝트 정보)
+        // 1. Firebase 설정 (고정)
         const firebaseConfig = {
             apiKey: "AIzaSyASI2ED_G48LjDzH5-P_ahzDEPhDEpCLP4",
             authDomain: "ulsan-safety-ar.firebaseapp.com",
@@ -66,37 +66,35 @@
         let map;
         const markers = {};
 
-        // 2. 지도 및 데이터 연동 함수
+        // 2. 지도 초기화 및 실시간 동기화
         function initMap() {
-            try {
-                map = new google.maps.Map(document.getElementById("map"), {
-                    center: { lat: 35.5012, lng: 129.3789 },
-                    zoom: 14,
-                    disableDefaultUI: true,
-                    zoomControl: true
-                });
+            map = new google.maps.Map(document.getElementById("map"), {
+                center: { lat: 35.5012, lng: 129.3789 },
+                zoom: 15,
+                disableDefaultUI: false
+            });
 
-                // Firebase 실시간 리스너: 제보가 들어오면 지도와 AR에 동시 표시
-                database.ref('reports').on('value', (snapshot) => {
-                    const data = snapshot.val();
-                    if(data) updateUI(data);
-                });
-            } catch (e) {
-                console.error("지도 로딩 에러:", e);
-                document.getElementById("map").innerHTML = "<div style='padding:20px;'>구글 지도 로드 실패. API 키의 결제 계정 연결을 확인하세요.</div>";
-            }
+            // Firebase에서 제보 데이터 감시
+            database.ref('reports').on('value', (snapshot) => {
+                const data = snapshot.val();
+                if(data) updateSystem(data);
+            });
         }
 
-        function updateUI(data) {
+        function updateSystem(data) {
             const arScene = document.getElementById('ar-markers');
-            arScene.innerHTML = ''; // AR 마커 초기화 후 재생성
+            arScene.innerHTML = ''; 
+            let lastPos = null;
 
             for (let id in data) {
                 const report = data[id];
                 const lat = parseFloat(report.lat);
                 const lng = parseFloat(report.lng);
-                
-                // [지도 마커]
+
+                if (isNaN(lat) || isNaN(lng)) continue;
+                lastPos = { lat: lat, lng: lng };
+
+                // [지도 마커] 기존 마커 없으면 생성
                 if (!markers[id]) {
                     markers[id] = new google.maps.Marker({
                         position: { lat: lat, lng: lng },
@@ -106,26 +104,29 @@
                     });
                 }
 
-                // [AR 마커 - 빨간색 위치 구체]
+                // [AR 마커] 3D 공간에 빨간 구체 생성
                 const arMarker = document.createElement('a-entity');
                 arMarker.setAttribute('gps-entity-place', `latitude: ${lat}; longitude: ${lng};`);
                 arMarker.setAttribute('geometry', 'primitive: sphere; radius: 3');
-                arMarker.setAttribute('material', 'color: red; opacity: 0.8; shader: flat');
+                arMarker.setAttribute('material', 'color: red; opacity: 0.8');
                 
-                // 마커 위 텍스트 (위험 유형 표시)
                 const text = document.createElement('a-text');
                 text.setAttribute('value', report.type || '위험');
                 text.setAttribute('align', 'center');
                 text.setAttribute('scale', '40 40 40');
                 text.setAttribute('position', '0 8 0');
-                text.setAttribute('look-at', '[gps-camera]');
                 
                 arMarker.appendChild(text);
                 arScene.appendChild(arMarker);
             }
+
+            // [부산 테스트 대응] 마지막 제보 위치로 지도를 강제 이동
+            if (lastPos) {
+                map.setCenter(lastPos);
+            }
         }
 
-        // 3. 모드 전환 로직
+        // 3. 모드 전환 함수
         function switchToMap() {
             document.getElementById('map-container').style.visibility = 'visible';
             document.getElementById('ar-container').style.visibility = 'hidden';
@@ -136,15 +137,14 @@
             document.getElementById('map-container').style.visibility = 'hidden';
             document.getElementById('ar-container').style.visibility = 'visible';
             document.getElementById('status-label').innerText = "현재 모드: 🚀 AR 현장 스캔 중";
-            // AR 화면 리사이즈 강제 호출 (카메라 로딩 방지)
             window.dispatchEvent(new Event('resize'));
         }
 
-        // 구글 맵 API 로드 (도선사님 전용 키)
-        const gMapApiKey = "AIzaSyASI2ED_G48LjDzH5-P_ahzDEPhDEpCLP4";
+        // 구글 맵 로드 (도선사님 키)
+        const gKey = "AIzaSyASI2ED_G48LjDzH5-P_ahzDEPhDEpCLP4";
         const script = document.createElement('script');
-        script.src = `https://maps.googleapis.com/maps/api/js?key=${gMapApiKey}&callback=initMap`;
-        script.async = true;
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${gKey}&callback=initMap`;
+        script.defer = true;
         document.head.appendChild(script);
     </script>
 </body>
