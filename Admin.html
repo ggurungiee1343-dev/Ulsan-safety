@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>울산항 안전 관리 (Admin v5)</title>
+    <title>울산항 안전 통합 관제 (Admin v6)</title>
     
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
@@ -50,7 +50,7 @@
     </div>
 
     <script>
-        // 1. Firebase 설정 (고정)
+        // 1. Firebase 설정 (도선사님 프로젝트 정보)
         const firebaseConfig = {
             apiKey: "AIzaSyASI2ED_G48LjDzH5-P_ahzDEPhDEpCLP4",
             authDomain: "ulsan-safety-ar.firebaseapp.com",
@@ -68,8 +68,9 @@
 
         // 2. 지도 초기화 및 실시간 동기화
         function initMap() {
+            console.log("구글 지도 초기화 시작");
             map = new google.maps.Map(document.getElementById("map"), {
-                center: { lat: 35.5012, lng: 129.3789 },
+                center: { lat: 35.5012, lng: 129.3789 }, // 울산항 기준
                 zoom: 15,
                 disableDefaultUI: false
             });
@@ -77,6 +78,7 @@
             // Firebase에서 제보 데이터 감시
             database.ref('reports').on('value', (snapshot) => {
                 const data = snapshot.val();
+                console.log("Firebase 수신 데이터:", data); // 브라우저 개발자 도구(F12)에서 확인 가능
                 if(data) updateSystem(data);
             });
         }
@@ -88,64 +90,20 @@
 
             for (let id in data) {
                 const report = data[id];
+                
+                // 중요: 위도/경도가 어떤 형식으로 들어오든 숫자로 확실히 변환 (가장 흔한 에러 방지)
                 const lat = parseFloat(report.lat);
                 const lng = parseFloat(report.lng);
 
-                if (isNaN(lat) || isNaN(lng)) continue;
+                if (isNaN(lat) || isNaN(lng)) {
+                    console.error("좌표 변환 실패:", report);
+                    continue; 
+                }
                 lastPos = { lat: lat, lng: lng };
 
-                // [지도 마커] 기존 마커 없으면 생성
+                // [지도 마커] 기존 마커 없으면 생성, 있으면 위치 갱신
                 if (!markers[id]) {
                     markers[id] = new google.maps.Marker({
                         position: { lat: lat, lng: lng },
                         map: map,
-                        title: report.type,
-                        animation: google.maps.Animation.DROP
-                    });
-                }
-
-                // [AR 마커] 3D 공간에 빨간 구체 생성
-                const arMarker = document.createElement('a-entity');
-                arMarker.setAttribute('gps-entity-place', `latitude: ${lat}; longitude: ${lng};`);
-                arMarker.setAttribute('geometry', 'primitive: sphere; radius: 3');
-                arMarker.setAttribute('material', 'color: red; opacity: 0.8');
-                
-                const text = document.createElement('a-text');
-                text.setAttribute('value', report.type || '위험');
-                text.setAttribute('align', 'center');
-                text.setAttribute('scale', '40 40 40');
-                text.setAttribute('position', '0 8 0');
-                
-                arMarker.appendChild(text);
-                arScene.appendChild(arMarker);
-            }
-
-            // [부산 테스트 대응] 마지막 제보 위치로 지도를 강제 이동
-            if (lastPos) {
-                map.setCenter(lastPos);
-            }
-        }
-
-        // 3. 모드 전환 함수
-        function switchToMap() {
-            document.getElementById('map-container').style.visibility = 'visible';
-            document.getElementById('ar-container').style.visibility = 'hidden';
-            document.getElementById('status-label').innerText = "현재 모드: 🗺️ 실시간 지도";
-        }
-
-        function switchToAR() {
-            document.getElementById('map-container').style.visibility = 'hidden';
-            document.getElementById('ar-container').style.visibility = 'visible';
-            document.getElementById('status-label').innerText = "현재 모드: 🚀 AR 현장 스캔 중";
-            window.dispatchEvent(new Event('resize'));
-        }
-
-        // 구글 맵 로드 (도선사님 키)
-        const gKey = "AIzaSyASI2ED_G48LjDzH5-P_ahzDEPhDEpCLP4";
-        const script = document.createElement('script');
-        script.src = `https://maps.googleapis.com/maps/api/js?key=${gKey}&callback=initMap`;
-        script.defer = true;
-        document.head.appendChild(script);
-    </script>
-</body>
-</html>
+                        title: report.type || '위험',
