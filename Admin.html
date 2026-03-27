@@ -1,70 +1,71 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html>
 <head>
-    <meta charset="UTF-8">
+    <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>울산항 안전 관리자 - AR 관제</title>
     <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
     <style>
-        body { margin: 0; padding: 0; }
-        #map { height: 100vh; width: 100%; position: absolute; top: 0; left: 0; z-index: 1; }
-        .ar-scene { position: absolute; top: 0; left: 0; width: 100%; height: 100vh; display: none; z-index: 2; }
-        .ui-panel { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); z-index: 999; display: flex; gap: 10px; }
-        button { padding: 15px 25px; border-radius: 30px; border: none; font-weight: bold; cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
-        .btn-toggle { background: #007bff; color: white; }
+        body { margin: 0; overflow: hidden; font-family: sans-serif; }
+        /* 지도 레이어 */
+        #map-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; background: white; }
+        /* AR 레이어 (기본은 숨김) */
+        #ar-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 5; visibility: hidden; }
+        /* 상단 모드 표시 바 */
+        .status-bar { position: fixed; top: 10px; left: 50%; transform: translateX(-50%); z-index: 1000; background: rgba(0,0,0,0.7); color: white; padding: 5px 15px; border-radius: 20px; font-size: 14px; }
+        /* 하단 버튼 */
+        .btn-group { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); z-index: 1000; display: flex; gap: 10px; width: 90%; }
+        button { flex: 1; padding: 15px; border-radius: 10px; border: none; font-weight: bold; font-size: 16px; box-shadow: 0 4px 6px rgba(0,0,0,0.2); }
+        .btn-map { background: #007bff; color: white; }
         .btn-ar { background: #ff4757; color: white; }
     </style>
 </head>
 <body>
 
-    <div id="map">
-        <p style="text-align: center; margin-top: 50px;">지도를 로드 중입니다...</p>
+    <div id="status" class="status-bar">현재 모드: 🗺️ 2D 지도</div>
+
+    <div id="map-container">
+        <div style="padding: 20px; text-align: center;">
+            <h3>울산항 안전 관리자 지도</h3>
+            <p>여기에 기존 지도가 표시됩니다.</p>
+        </div>
     </div>
 
-    <div id="ar-view" class="ar-scene">
-        <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false;" vr-mode-ui="enabled: false">
+    <div id="ar-container">
+        <a-scene embedded arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false;" vr-mode-ui="enabled: false">
             <a-entity id="hazard-marker" 
-                      gps-entity-place="latitude: 35.5012; longitude: 129.3789;"
-                      geometry="primitive: sphere; radius: 1.5" 
-                      material="color: red; opacity: 0.9"
-                      look-at="[gps-camera]">
-                <a-text value="제보: 낙하물 주의" align="center" scale="15 15 15" position="0 3 0" color="yellow"></a-text>
+                      gps-entity-place="latitude: 35.5012; longitude: 129.3789;" 
+                      geometry="primitive: box; width: 2; height: 2; depth: 2" 
+                      material="color: red;"
+                      scale="5 5 5">
+                <a-text value="위험 지역" align="center" position="0 2 0" scale="10 10 10" color="white"></a-text>
             </a-entity>
-
             <a-camera gps-camera rotation-reader></a-camera>
         </a-scene>
     </div>
 
-    <div class="ui-panel">
-        <button class="btn-toggle" onclick="showMap()">🗺️ 지도 보기</button>
-        <button class="btn-ar" onclick="showAR()">🚀 AR 모드 (360도 스캔)</button>
+    <div class="btn-group">
+        <button class="btn-map" onclick="switchToMap()">🗺️ 지도 보기</button>
+        <button class="btn-ar" onclick="switchToAR()">🚀 AR 스캔</button>
     </div>
 
     <script>
-        // 모드 전환 함수
-        function showMap() {
-            document.getElementById('map').style.display = 'block';
-            document.getElementById('ar-view').style.display = 'none';
+        function switchToMap() {
+            document.getElementById('map-container').style.visibility = 'visible';
+            document.getElementById('ar-container').style.visibility = 'hidden';
+            document.getElementById('status').innerText = "현재 모드: 🗺️ 2D 지도";
         }
 
-        function showAR() {
-            document.getElementById('map').style.display = 'none';
-            document.getElementById('ar-view').style.display = 'block';
-            // AR 모드 진입 시 카메라 권한 요청 등을 위해 리프레시가 필요할 수 있음
+        function switchToAR() {
+            // 카메라 권한을 명시적으로 확인하기 위해 보류 레이어 변경
+            document.getElementById('map-container').style.visibility = 'hidden';
+            document.getElementById('ar-container').style.visibility = 'visible';
+            document.getElementById('status').innerText = "현재 모드: 🚀 AR 스캔 중";
+            
+            // 카메라 작동을 위해 씬에 리사이즈 이벤트 트리거
+            window.dispatchEvent(new Event('resize'));
         }
-
-        // 여기에 기존 도선사님의 구글맵 로드 스크립트와 Firebase 연동 코드를 붙여넣으시면 됩니다.
-        // Firebase에서 데이터를 가져와서 아래와 같이 a-scene에 추가하는 로직이 핵심입니다.
-        /* function addARMarker(lat, lng, title) {
-            const scene = document.querySelector('a-scene');
-            const entity = document.createElement('a-entity');
-            entity.setAttribute('gps-entity-place', `latitude: ${lat}; longitude: ${lng};`);
-            entity.setAttribute('geometry', 'primitive: sphere; radius: 1.5');
-            entity.setAttribute('material', 'color: red');
-            scene.appendChild(entity);
-        }
-        */
     </script>
 </body>
 </html>
