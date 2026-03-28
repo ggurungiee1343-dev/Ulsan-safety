@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>울산항 안전 통합 관제 (Admin v9)</title>
+    <title>울산항 안전 통합 관제 (Admin v10)</title>
     
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
@@ -41,7 +41,7 @@
     </div>
 
     <script>
-        // 1. Firebase 설정 (Index와 완전 일치)
+        // 1. Firebase 설정
         const firebaseConfig = {
             apiKey: "AIzaSyASI2ED_G48LjDzH5-P_ahzDEPhDEpCLP4",
             authDomain: "ulsan-safety-ar.firebaseapp.com",
@@ -55,72 +55,76 @@
         const database = firebase.database();
 
         let map;
-        const markers = {};
-        let infoWindow; // 정보창 단일 객체 사용
+        let infoWindow;
+        const markers = {}; // 이미 생성된 마커 관리용
 
-        // 2. 지도 초기화
         function initMap() {
+            // 초기 위치는 울산항 중심
             map = new google.maps.Map(document.getElementById("map"), {
                 center: { lat: 35.5012, lng: 129.3789 },
-                zoom: 15,
+                zoom: 14,
                 disableDefaultUI: false
             });
 
             infoWindow = new google.maps.InfoWindow();
 
-            // Firebase 실시간 리스너
+            // 데이터 실시간 감시 (safety_reports 방)
             database.ref('safety_reports').on('value', (snapshot) => {
                 const data = snapshot.val();
-                if(data) updateSystem(data);
+                if (data) {
+                    console.log("데이터 수신됨:", data);
+                    updateMarkers(data);
+                }
             });
         }
 
-        function updateSystem(data) {
-            const arScene = document.getElementById('ar-markers');
-            arScene.innerHTML = ''; 
-            let lastPos = null;
+        function updateMarkers(data) {
+            const arMarkersContainer = document.getElementById('ar-markers');
+            arMarkersContainer.innerHTML = ''; // AR 마커는 갱신
+            let latestPos = null;
 
-            for (let id in data) {
-                const report = data[id];
+            for (let key in data) {
+                const report = data[key];
                 const lat = parseFloat(report.lat);
                 const lng = parseFloat(report.lng);
-                if (isNaN(lat) || isNaN(lng)) continue;
                 
-                lastPos = { lat: lat, lng: lng };
+                if (isNaN(lat) || isNaN(lng)) continue;
+                latestPos = { lat, lng };
 
-                // [지도 마커 및 클릭 이벤트]
-                if (!markers[id]) {
+                // [지도 마커] 기존에 없는 마커만 새로 생성
+                if (!markers[key]) {
                     const marker = new google.maps.Marker({
-                        position: lastPos,
+                        position: latestPos,
                         map: map,
-                        animation: google.maps.Animation.DROP
+                        title: report.description || "위험 제보",
+                        icon: "http://maps.google.com/mapfiles/ms/icons/red-dot.png"
                     });
-                    
-                    // 마커 클릭 시 정보창 표시 로직 추가
+
                     marker.addListener("click", () => {
                         const content = `
-                            <div style="padding:10px; color:#333;">
-                                <strong style="font-size:14px;">📝 제보 내용</strong><br>
-                                <p style="margin:5px 0;">${report.description || '내용 없음'}</p>
+                            <div style="padding:10px; color:#333; min-width:150px;">
+                                <strong style="color:#d9534f;">⚠️ 위험 제보</strong><br>
+                                <p style="margin:5px 0; font-size:14px;">${report.description || '내용 없음'}</p>
+                                <hr style="border:0.5px solid #eee;">
                                 <small style="color:#888;">⏰ ${report.timestamp || ''}</small>
                             </div>`;
                         infoWindow.setContent(content);
                         infoWindow.open(map, marker);
                     });
-                    
-                    markers[id] = marker;
+                    markers[key] = marker;
                 }
 
-                // [AR 마커]
-                const arMarker = document.createElement('a-entity');
-                arMarker.setAttribute('gps-entity-place', `latitude: ${lat}; longitude: ${lng};`);
-                arMarker.setAttribute('geometry', 'primitive: sphere; radius: 3');
-                arMarker.setAttribute('material', 'color: red; opacity: 0.8');
-                arScene.appendChild(arMarker);
+                // [AR 마커] AR 모드용 3D 구체 생성
+                const arEntity = document.createElement('a-entity');
+                arEntity.setAttribute('gps-entity-place', `latitude: ${lat}; longitude: ${lng};`);
+                arEntity.setAttribute('geometry', 'primitive: sphere; radius: 5');
+                arEntity.setAttribute('material', 'color: #ff4757; opacity: 0.9; shader: flat');
+                arMarkersContainer.appendChild(arEntity);
             }
 
-            if (lastPos) {
-                map.setCenter(lastPos);
+            // 마지막 제보 위치로 지도 중심 이동 (부산 테스트 시 유용)
+            if (latestPos) {
+                map.panTo(latestPos);
             }
         }
 
@@ -134,9 +138,11 @@
             document.getElementById('map-container').style.visibility = 'hidden';
             document.getElementById('ar-container').style.visibility = 'visible';
             document.getElementById('status-label').innerText = "현재 모드: 🚀 AR 현장 스캔 중";
+            // AR 엔진 리프레시를 위해 화면 크기 재조정 이벤트 발생
             window.dispatchEvent(new Event('resize'));
         }
 
+        // 구글 맵 API 로드
         const gKey = "AIzaSyDxW1MSwOsEMsWuyEUicFzms6ybX0Ff8To";
         const script = document.createElement('script');
         script.src = `https://maps.googleapis.com/maps/api/js?key=${gKey}&callback=initMap`;
