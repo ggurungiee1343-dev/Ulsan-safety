@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>울산항 안전 관제 (Admin v14)</title>
+    <title>울산항 안전 관제 (Admin v15)</title>
     
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
@@ -14,13 +14,13 @@
         html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; }
         .header { position: absolute; top: 0; left: 0; width: 100%; height: 50px; background: rgba(0, 34, 68, 0.95); color: white; line-height: 50px; text-align: center; font-weight: bold; z-index: 2000; }
         
-        #main-view { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
-        #map { width: 100%; height: 100%; position: absolute; z-index: 10; visibility: visible; }
+        /* 지도 영역 */
+        #map { width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: 10; background: white; }
         
-        /* AR 컨테이너 초기 설정 보강 */
+        /* AR 영역: 검은 배경을 투명하게 처리하고 z-index 조정 */
         #ar-container { 
             width: 100%; height: 100%; position: absolute; top: 0; left: 0;
-            z-index: 5; visibility: hidden; opacity: 0; transition: opacity 0.3s;
+            z-index: 5; visibility: hidden; background: transparent;
         }
 
         .btn-group { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 400px; display: flex; gap: 10px; z-index: 5000; }
@@ -30,13 +30,15 @@
         
         #status-label { position: absolute; top: 60px; left: 50%; transform: translateX(-50%); background: rgba(40, 167, 69, 0.9); color: white; padding: 5px 15px; border-radius: 20px; font-size: 11px; z-index: 2000; }
         
-        /* AR 모드 시 카메라 배경이 잘 보이도록 설정 */
-        .a-canvas { z-index: 1 !important; }
+        /* AR 시스템 강제 노출 설정 */
+        .a-canvas { z-index: 2 !important; }
+        video { position: absolute; top: 0; left: 0; width: 100% !important; height: 100% !important; object-fit: cover; z-index: 1 !important; }
     </style>
 </head>
 <body>
     <div class="header">⚓ 울산항 안전 통합 관제 (Admin)</div>
-    <div id="status-label">데이터 연결 중...</div>
+    <div id="status-label">데이터 수신 대기 중...</div>
 
-    <div id="main-view">
-        <div id="
+    <div id="map"></div>
+    
+    <div id="ar
