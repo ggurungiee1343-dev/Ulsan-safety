@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>울산항 안전 관제 (Admin v12)</title>
+    <title>울산항 안전 관제 (Admin v13)</title>
     
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
@@ -11,46 +11,22 @@
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
 
     <style>
-        /* 1. 배경 및 전체 레이아웃 */
         html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; }
-        
-        /* 2. 상단 헤더 */
-        .header { 
-            position: absolute; top: 0; left: 0; width: 100%; height: 50px;
-            background: rgba(0, 34, 68, 0.9); color: white; line-height: 50px;
-            text-align: center; font-weight: bold; z-index: 100; 
-        }
-
-        /* 3. 지도 및 AR 영역 (화면 전체 차지) */
+        .header { position: absolute; top: 0; left: 0; width: 100%; height: 50px; background: rgba(0, 34, 68, 0.95); color: white; line-height: 50px; text-align: center; font-weight: bold; z-index: 2000; }
         #main-view { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
         #map { width: 100%; height: 100%; position: absolute; z-index: 10; }
         #ar-container { width: 100%; height: 100%; position: absolute; z-index: 5; visibility: hidden; }
-
-        /* 4. 하단 버튼 영역 (지도를 이기도록 z-index 조절) */
-        .btn-group { 
-            position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); 
-            width: 90%; max-width: 400px; display: flex; gap: 10px; z-index: 1000; 
-        }
-        
-        button { 
-            flex: 1; padding: 18px; border-radius: 15px; border: none; 
-            font-weight: bold; font-size: 16px; color: white; 
-            box-shadow: 0 4px 15px rgba(0,0,0,0.5); cursor: pointer;
-        }
+        .btn-group { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 400px; display: flex; gap: 10px; z-index: 5000; }
+        button { flex: 1; padding: 18px; border-radius: 15px; border: none; font-weight: bold; font-size: 16px; color: white; box-shadow: 0 4px 15px rgba(0,0,0,0.5); cursor: pointer; }
         .btn-map { background: #007bff; }
         .btn-ar { background: #ff4757; }
-
-        /* 상태 표시 라벨 */
-        #status-label { 
-            position: absolute; top: 60px; left: 50%; transform: translateX(-50%); 
-            background: rgba(0,0,0,0.7); color: white; padding: 5px 15px; 
-            border-radius: 20px; font-size: 11px; z-index: 100;
-        }
+        /* 디버깅용 상태 라벨 */
+        #status-label { position: absolute; top: 60px; left: 50%; transform: translateX(-50%); background: rgba(217, 83, 79, 0.9); color: white; padding: 5px 15px; border-radius: 20px; font-size: 11px; z-index: 2000; }
     </style>
 </head>
 <body>
     <div class="header">⚓ 울산항 안전 통합 관제 (Admin)</div>
-    <div id="status-label">현재 모드: 🗺️ 실시간 지도</div>
+    <div id="status-label">데이터 연결 중...</div>
 
     <div id="main-view">
         <div id="map"></div>
@@ -68,7 +44,6 @@
     </div>
 
     <script>
-        // Firebase 설정 (Index와 완전 일치)
         const firebaseConfig = {
             apiKey: "AIzaSyASI2ED_G48LjDzH5-P_ahzDEPhDEpCLP4",
             authDomain: "ulsan-safety-ar.firebaseapp.com",
@@ -86,18 +61,30 @@
         const markers = {};
 
         function initMap() {
-            // 지도가 안 뜨는 문제를 방지하기 위해 높이를 강제 인식시킨 후 로드
             map = new google.maps.Map(document.getElementById("map"), {
                 center: { lat: 35.5012, lng: 129.3789 },
-                zoom: 14,
-                disableDefaultUI: true,
-                zoomControl: true
+                zoom: 13,
+                disableDefaultUI: false
             });
             infoWindow = new google.maps.InfoWindow();
 
-            database.ref('safety_reports').on('value', (snapshot) => {
+            // Firebase 데이터 로드 시도 및 상태 표시
+            const reportsRef = database.ref('safety_reports');
+            reportsRef.on('value', (snapshot) => {
                 const data = snapshot.val();
-                if (data) updateMarkers(data);
+                const statusLabel = document.getElementById("status-label");
+                
+                if (data) {
+                    const count = Object.keys(data).length;
+                    statusLabel.innerText = `✅ 수신 성공: 제보 ${count}건`;
+                    statusLabel.style.background = "rgba(40, 167, 69, 0.9)";
+                    updateMarkers(data);
+                } else {
+                    statusLabel.innerText = "⚠️ 수신된 제보 데이터가 없습니다.";
+                }
+            }, (error) => {
+                document.getElementById("status-label").innerText = "❌ DB 연결 오류 발생";
+                console.error(error);
             });
         }
 
@@ -108,45 +95,56 @@
 
             for (let key in data) {
                 const report = data[key];
+                // Index.html과 동일하게 lat, lng 필드 사용
                 const lat = parseFloat(report.lat);
                 const lng = parseFloat(report.lng);
+                
                 if (isNaN(lat) || isNaN(lng)) continue;
                 latestPos = { lat, lng };
 
                 if (!markers[key]) {
                     const marker = new google.maps.Marker({
-                        position: latestPos, map: map, animation: google.maps.Animation.DROP
+                        position: latestPos,
+                        map: map,
+                        animation: google.maps.Animation.DROP,
+                        title: report.description || "제보"
                     });
+                    
                     marker.addListener("click", () => {
-                        infoWindow.setContent(`<div style="padding:10px; color:#333;"><strong>⚠️ 위험 제보</strong><br>${report.description || '내용 없음'}<br><small>${report.timestamp || ''}</small></div>`);
+                        const content = `<div style="padding:10px; color:#333;">
+                            <strong>⚠️ 위험 제보</strong><br>${report.description || '내용 없음'}<br>
+                            <small style="color:#888;">⏰ ${report.timestamp || ''}</small></div>`;
+                        infoWindow.setContent(content);
                         infoWindow.open(map, marker);
                     });
                     markers[key] = marker;
                 }
 
+                // AR 마커 생성
                 const arEntity = document.createElement('a-entity');
                 arEntity.setAttribute('gps-entity-place', `latitude: ${lat}; longitude: ${lng};`);
                 arEntity.setAttribute('geometry', 'primitive: sphere; radius: 5');
                 arEntity.setAttribute('material', 'color: #ff4757; opacity: 0.9; shader: flat');
                 arContainer.appendChild(arEntity);
             }
-            if (latestPos) map.panTo(latestPos);
+            
+            // 데이터가 들어오면 해당 위치로 자동 이동
+            if (latestPos) {
+                map.setCenter(latestPos);
+            }
         }
 
         function switchToMap() {
             document.getElementById('map').style.zIndex = 10;
             document.getElementById('ar-container').style.visibility = 'hidden';
-            document.getElementById('status-label').innerText = "현재 모드: 🗺️ 실시간 지도";
         }
 
         function switchToAR() {
             document.getElementById('map').style.zIndex = 1;
             document.getElementById('ar-container').style.visibility = 'visible';
-            document.getElementById('status-label').innerText = "현재 모드: 🚀 AR 현장 스캔 중";
             window.dispatchEvent(new Event('resize'));
         }
 
-        // 구글 맵 API 로드
         const gKey = "AIzaSyDxW1MSwOsEMsWuyEUicFzms6ybX0Ff8To";
         const script = document.createElement('script');
         script.src = `https://maps.googleapis.com/maps/api/js?key=${gKey}&callback=initMap`;
